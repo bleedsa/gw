@@ -1,0 +1,4 @@
+codeberg.org/anaseto/goal v1.1.0 h1:VsgsIj3jQRYk9rX37eRPAuxrBRcSsY7pxWD6M3KqHag=
+codeberg.org/anaseto/goal v1.1.0/go.mod h1:uSilOn+ZWioD+gG+3OopP090Fth5H47V/TU9ziI++CM=
+github.com/mattn/go-sqlite3 v1.14.24 h1:tpSp2G2KyMnnQu99ngJ47EIkWVmliIizyZBfPrBWDRM=
+github.com/mattn/go-sqlite3 v1.14.24/go.mod h1:Uh1q+B4BYcTPb+yiD3kU8Ct7aC0hY9fxUwlHK0RXw+Y=
