@@ -13,6 +13,83 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
+func RowsToV(rs *sql.Rows) goal.V {
+	rs.ColumnTypes()
+	cols, _ := rs.Columns()
+
+	count := len(cols)
+	vals := make([]interface{}, count)
+	args := make([]interface{}, count)
+	for i := range vals {
+		args[i] = &vals[i]
+	}
+
+	buf := make(map[int]map[string]goal.V)
+
+	i := 0
+	for ; rs.Next(); i++ {
+		row := make(map[string]goal.V)
+
+		err := rs.Scan(args...)
+		if err != nil {
+			return goal.Panicf("error scanning column: %q", err)
+		}
+
+		for i, v := range vals {
+			switch v.(type) {
+			case int:
+			case int8: case int16:
+			case int32: case int64:
+				row[cols[i]] = goal.NewI(v.(int64))
+				break
+
+			case float32:
+			case float64:
+				row[cols[i]] = goal.NewF(v.(float64))
+				break
+
+			case bool:
+				if v.(bool) {
+					row[cols[i]] = goal.NewI(1)
+				} else {
+					row[cols[i]] = goal.NewI(0)
+				}
+				break
+
+			case string:
+				row[cols[i]] = goal.NewS(v.(string))
+				break
+
+			case nil:
+				row[cols[i]] = goal.NewAV([]goal.V{})
+
+			default:
+				return goal.Panicf("invalid type")
+			}
+		}
+
+		buf[i] = row
+	}
+
+	ret := make([]goal.V, i)
+
+	for i, x := range buf {
+		xs := make([]goal.V, count)
+		ys := make([]goal.V, count)
+
+		idx := 0
+		for k, v := range x {
+			xs[idx] = goal.NewS(k)
+			ys[idx] = v
+			idx++
+		}
+
+		ret[i] = goal.NewD(goal.NewAV(xs), goal.NewAV(ys))
+	}
+
+	return goal.NewAV(ret)
+}
+
 type gwSql struct {
 	db *sql.DB
 	s string
@@ -73,16 +150,47 @@ func SQLOpen(ctx *goal.Context, args []goal.V) goal.V {
 	})
 }
 
+
+func SQLQuery(ctx *goal.Context, args []goal.V) goal.V {
+	/*
+	 * boilerplate
+	 */
+	 if len(args) != 2 {
+		 return goal.Panicf("sql.qry[db;s]: ~2=#args")
+	 }
+
+	 db, ok := args[1].BV().(*gwSql); if !ok {
+		 return goal.Panicf(
+			 "sql.qry[db;s]: bad type %q in db", args[1].Type(),
+		 )
+	 }
+
+	 cmd, ok := args[0].BV().(goal.S); if !ok {
+		 return goal.Panicf(
+			 "sql.qry[db;s]: bad type %q in s", args[0].Type(),
+		 )
+	 }
+
+	 rows, err := db.db.Query(string(cmd)); if err != nil {
+		 return goal.Panicf(
+			 "sql.qry[db;s]: err in query: %s", err,
+		 )
+	 }
+
+	 return RowsToV(rows)
+ }
+
 func SQLExe(ctx *goal.Context, args []goal.V) goal.V {
+	/*
+	 * boilerplate
+	 */
 	if len(args) != 2 {
-		return goal.Panicf(
-			"db sql.exe s: too many args", args[0].Type(),
-		)
+		return goal.Panicf("sql.exe[db;s]: ~2=#args")
 	}
 
 	db, ok := args[1].BV().(*gwSql); if !ok {
 		return goal.Panicf(
-			"db sql.exe s: bad type %q in db", args[0].Type(),
+			"db sql.exe s: bad type %q in db", args[1].Type(),
 		)
 	}
 
@@ -92,9 +200,26 @@ func SQLExe(ctx *goal.Context, args []goal.V) goal.V {
 		)
 	}
 
-	db.db.Exec(string(cmd))
+	/* actually exec */
+	res, err := db.db.Exec(string(cmd)); if err != nil {
+		return goal.Panicf(
+			"db sql.exe s: err in exec: %s", err,
+		)
+	}
 
-	return goal.NewAV([]goal.V{})
+	/*
+	 * unwrap the result data
+	 */
+	ret := []goal.V{goal.NewI(-1),goal.NewI(-1)}
+
+	x, err := res.LastInsertId(); if err == nil {
+		ret[0] = goal.NewI(x)
+	}
+	x, err = res.RowsAffected(); if err == nil {
+		ret[1] = goal.NewI(x)
+	}
+
+	return goal.NewAV(ret)
 }
 
 func main() {
@@ -105,6 +230,7 @@ func main() {
 	ctx.AssignGlobal("sql.open", ctx.RegisterMonad(".sql.open", SQLOpen))
 	ctx.AssignGlobal("sql.cls",  ctx.RegisterMonad(".sql.cls", SQLClose))
 	ctx.AssignGlobal("sql.exe",  ctx.RegisterDyad(".sql.exe", SQLExe))
+	ctx.AssignGlobal("sql.qry",  ctx.RegisterDyad(".sql.qry", SQLQuery))
 
 	cmd.Exit(cmd.Run(ctx, cmd.Config{
 		Help: help.HelpFunc(),
