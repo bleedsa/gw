@@ -4,6 +4,7 @@ import (
 	"os"
 	"fmt"
 	"database/sql"
+	"net/url"
 
 	"codeberg.org/anaseto/goal"
 	"codeberg.org/anaseto/goal/cmd"
@@ -108,6 +109,59 @@ func (x *gwSql) Type() string {
 	return "SQL"
 }
 
+func EscStr(sql string) string {
+	dest := make([]byte, 0, 2*len(sql))
+	var escape byte
+	for i := 0; i < len(sql); i++ {
+		c := sql[i]
+
+		escape = 0
+
+		switch c {
+		case 0: /* Must be escaped for 'mysql' */
+			escape = '0'
+			break
+		case '\n': /* Must be escaped for logs */
+			escape = 'n'
+			break
+		case '\r':
+			escape = 'r'
+			break
+		case '\\':
+			escape = '\\'
+			break
+		case '\'':
+			dest = append(dest, '\'');
+			break
+		case '"':
+			escape = '"'
+			break
+		}
+
+		if escape != 0 {
+			dest = append(dest, '\\', escape)
+		} else {
+			dest = append(dest, c)
+		}
+	}
+
+	return string(dest)
+}
+
+func SQLEsc(ctx *goal.Context, args []goal.V) goal.V {
+	if len(args) != 1 {
+		return goal.Panicf("sql.esc s: ~1=#args")
+	}
+
+	str, ok := args[0].BV().(goal.S); if !ok {
+		return goal.Panicf(
+			"sql.esc s: bad type %q in s", args[0].Type(),
+		)
+	}
+
+	return goal.NewS(EscStr(string(str)))
+}
+
 func SQLClose(ctx *goal.Context, args []goal.V) goal.V {
 	if len(args) > 1 {
 		return goal.Panicf(
@@ -178,7 +232,7 @@ func SQLQuery(ctx *goal.Context, args []goal.V) goal.V {
 	 }
 
 	 return RowsToV(rows)
- }
+}
 
 func SQLExe(ctx *goal.Context, args []goal.V) goal.V {
 	/*
@@ -222,6 +276,22 @@ func SQLExe(ctx *goal.Context, args []goal.V) goal.V {
 	return goal.NewAV(ret)
 }
 
+func URLDec(ctx *goal.Context, args []goal.V) goal.V {
+	if len(args) != 1 {
+		return goal.Panicf("url.dec s: ~1=#args")
+	}
+
+	x, ok := args[0].BV().(goal.S); if !ok {
+		return goal.Panicf("url.dec: bad type %q in s", args[0].Type())
+	}
+
+	ret, err := url.QueryUnescape(string(x)); if err != nil {
+		return goal.Panicf("url.dec: cannot unescape %s", string(x))
+	}
+
+	return goal.NewS(ret)
+}
+
 func main() {
 	ctx := goal.NewContext()
 	ctx.Log = os.Stderr
@@ -229,8 +299,11 @@ func main() {
 
 	ctx.AssignGlobal("sql.open", ctx.RegisterMonad(".sql.open", SQLOpen))
 	ctx.AssignGlobal("sql.cls",  ctx.RegisterMonad(".sql.cls", SQLClose))
+	ctx.AssignGlobal("sql.esc",  ctx.RegisterMonad(".sql.esc", SQLEsc))
 	ctx.AssignGlobal("sql.exe",  ctx.RegisterDyad(".sql.exe", SQLExe))
 	ctx.AssignGlobal("sql.qry",  ctx.RegisterDyad(".sql.qry", SQLQuery))
+
+	ctx.AssignGlobal("url.dec",  ctx.RegisterMonad(".url.dec", URLDec))
 
 	cmd.Exit(cmd.Run(ctx, cmd.Config{
 		Help: help.HelpFunc(),
