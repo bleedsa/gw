@@ -3,6 +3,8 @@ package main
 import (
 	"os"
 	"fmt"
+	"time"
+	"html"
 	"database/sql"
 	"net/url"
 
@@ -292,6 +294,25 @@ func URLDec(ctx *goal.Context, args []goal.V) goal.V {
 	return goal.NewS(ret)
 }
 
+func HTMLEsc(ctx *goal.Context, args []goal.V) goal.V {
+	if len(args) != 1 {
+		return goal.Panicf("html.esc s: ~1=#args")
+	}
+
+	x, ok := args[0].BV().(goal.S); if !ok {
+		return goal.Panicf("html.esc: bad type %q in s", args[0].Type())
+	}
+
+	return goal.NewS(html.EscapeString(string(x)))
+}
+
+func UtilNow(ctx *goal.Context, args []goal.V) goal.V {
+	if len(args) != 1 {
+		return goal.Panicf("util.now x: ~1=#args")
+	}
+	return goal.NewI(time.Now().Unix())
+}
+
 func main() {
 	ctx := goal.NewContext()
 	ctx.Log = os.Stderr
@@ -304,6 +325,10 @@ func main() {
 	ctx.AssignGlobal("sql.qry",  ctx.RegisterDyad(".sql.qry", SQLQuery))
 
 	ctx.AssignGlobal("url.dec",  ctx.RegisterMonad(".url.dec", URLDec))
+
+	ctx.AssignGlobal("html.esc", ctx.RegisterMonad(".html.esc", HTMLEsc))
+
+	ctx.AssignGlobal("util.now", ctx.RegisterMonad(".util.now", UtilNow))
 
 	cmd.Exit(cmd.Run(ctx, cmd.Config{
 		Help: help.HelpFunc(),
