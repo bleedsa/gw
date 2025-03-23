@@ -7,6 +7,10 @@ import (
 	"html"
 	"database/sql"
 	"net/url"
+	"mime"
+	"mime/multipart"
+	"io"
+	"strings"
 
 	"codeberg.org/anaseto/goal"
 	"codeberg.org/anaseto/goal/cmd"
@@ -300,7 +304,7 @@ func HTMLEsc(ctx *goal.Context, args []goal.V) goal.V {
 	}
 
 	x, ok := args[0].BV().(goal.S); if !ok {
-		return goal.Panicf("html.esc: bad type %q in s", args[0].Type())
+		return goal.Panicf("html.esc s: bad type %q in s", args[0].Type())
 	}
 
 	return goal.NewS(html.EscapeString(string(x)))
@@ -313,22 +317,88 @@ func UtilNow(ctx *goal.Context, args []goal.V) goal.V {
 	return goal.NewI(time.Now().Unix())
 }
 
+func UtilMultipart(ctx *goal.Context, args []goal.V) goal.V {
+	if len(args) != 1 {
+		return goal.Panicf("util.multipart s: ~1=#args")
+	}
+
+	form, ok := args[0].BV().(goal.S); if !ok {
+		return goal.Panicf("util.multipart s: bad type %q in s", args[0].Type())
+	}
+
+	env := make(map[string]string)
+	for _, e := range os.Environ() {
+		if i := strings.Index(e, "="); i >= 0 {
+			env[e[:i]] = e[i+1:]
+		}
+	}
+
+	_, prms, _ := mime.ParseMediaType(env["CONTENT_TYPE"])
+
+	sr := strings.NewReader(string(form))
+	mr := multipart.NewReader(sr, prms["boundary"])
+
+	/* resultant map */
+	res := make(map[string]goal.V)
+
+	for {
+		p, err := mr.NextPart()
+		if err == io.EOF {
+			goto ret
+		}
+		if err != nil {
+			return goal.Panicf("util.multipart s: failed to get next part: %q", err)
+		}
+
+		fi := p.FileName()
+		fo := p.FormName()
+
+		buf, err := io.ReadAll(p)
+		if err != nil {
+			return goal.Panicf("util.multipart s: failed to read part: %q", err)
+		}
+
+		if fi == "" {
+			res[fo] = goal.NewS(string(buf))
+		} else {
+			head := goal.NewAS([]string{"name",        "content"})
+			body := goal.NewAV([]goal.V{goal.NewS(fi), goal.NewAB(buf)})
+			res[fo] = goal.NewD(head, body)
+		}
+	}
+
+ret:
+	i := 0
+	wid := len(res)
+	head := make([]goal.V, wid)
+	body := make([]goal.V, wid)
+
+	for k, v := range res {
+		head[i] = goal.NewS(k)
+		body[i] = v
+		i++
+	}
+
+	return goal.NewD(goal.NewAV(head), goal.NewAV(body))
+}
+
 func main() {
 	ctx := goal.NewContext()
 	ctx.Log = os.Stderr
 	gos.Import(ctx, "")
 
-	ctx.AssignGlobal("sql.open", ctx.RegisterMonad(".sql.open", SQLOpen))
-	ctx.AssignGlobal("sql.cls",  ctx.RegisterMonad(".sql.cls", SQLClose))
-	ctx.AssignGlobal("sql.esc",  ctx.RegisterMonad(".sql.esc", SQLEsc))
-	ctx.AssignGlobal("sql.exe",  ctx.RegisterDyad(".sql.exe", SQLExe))
-	ctx.AssignGlobal("sql.qry",  ctx.RegisterDyad(".sql.qry", SQLQuery))
+	ctx.AssignGlobal("sql.open",       ctx.RegisterMonad(".sql.open", SQLOpen))
+	ctx.AssignGlobal("sql.cls",        ctx.RegisterMonad(".sql.cls", SQLClose))
+	ctx.AssignGlobal("sql.esc",        ctx.RegisterMonad(".sql.esc", SQLEsc))
+	ctx.AssignGlobal("sql.exe",        ctx.RegisterDyad(".sql.exe", SQLExe))
+	ctx.AssignGlobal("sql.qry",        ctx.RegisterDyad(".sql.qry", SQLQuery))
 
-	ctx.AssignGlobal("url.dec",  ctx.RegisterMonad(".url.dec", URLDec))
+	ctx.AssignGlobal("url.dec",        ctx.RegisterMonad(".url.dec", URLDec))
 
-	ctx.AssignGlobal("html.esc", ctx.RegisterMonad(".html.esc", HTMLEsc))
+	ctx.AssignGlobal("html.esc",       ctx.RegisterMonad(".html.esc", HTMLEsc))
 
-	ctx.AssignGlobal("util.now", ctx.RegisterMonad(".util.now", UtilNow))
+	ctx.AssignGlobal("util.now",       ctx.RegisterMonad(".util.now", UtilNow))
+	ctx.AssignGlobal("util.multipart", ctx.RegisterMonad(".util.multipart", UtilMultipart))
 
 	cmd.Exit(cmd.Run(ctx, cmd.Config{
 		Help: help.HelpFunc(),
