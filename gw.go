@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 	"html"
+	"net/http"
 	"database/sql"
 	"net/url"
 	"mime"
@@ -95,6 +96,10 @@ func RowsToV(rs *sql.Rows) goal.V {
 	}
 
 	return goal.NewAV(ret)
+}
+
+func Err(x string) goal.V {
+	return goal.NewError(goal.NewS(x))
 }
 
 type gwSql struct {
@@ -317,6 +322,23 @@ func UtilNow(ctx *goal.Context, args []goal.V) goal.V {
 	return goal.NewI(time.Now().Unix())
 }
 
+func UtilFileType(ctx *goal.Context, args []goal.V) goal.V {
+	if len(args) != 1 {
+		return goal.Panicf("util.filetype AB: ~1=#args")
+	}
+
+	p := args[0].BV(); if p == nil {
+		return goal.Panicf("util.filetype AB: bad type %q in s", args[0].Type())
+	}
+
+	switch v := p.(type) {
+	case *goal.AB:
+		return goal.NewS(http.DetectContentType(v.Slice))
+	default:
+		return goal.Panicf("util.filetype AB: bad type %q in AB", args[0].Type())
+	}
+}
+
 func UtilMultipart(ctx *goal.Context, args []goal.V) goal.V {
 	if len(args) != 1 {
 		return goal.Panicf("util.multipart s: ~1=#args")
@@ -347,7 +369,7 @@ func UtilMultipart(ctx *goal.Context, args []goal.V) goal.V {
 			goto ret
 		}
 		if err != nil {
-			return goal.Panicf("util.multipart s: failed to get next part: %q", err)
+			return Err(fmt.Sprintf("util.multipart s: failed to get next part: %q", err))
 		}
 
 		fi := p.FileName()
@@ -355,7 +377,7 @@ func UtilMultipart(ctx *goal.Context, args []goal.V) goal.V {
 
 		buf, err := io.ReadAll(p)
 		if err != nil {
-			return goal.Panicf("util.multipart s: failed to read part: %q", err)
+			return Err(fmt.Sprintf("util.multipart s: failed to read part: %q", err))
 		}
 
 		if fi == "" {
@@ -398,6 +420,7 @@ func main() {
 	ctx.AssignGlobal("html.esc",       ctx.RegisterMonad(".html.esc", HTMLEsc))
 
 	ctx.AssignGlobal("util.now",       ctx.RegisterMonad(".util.now", UtilNow))
+	ctx.AssignGlobal("util.filetype",  ctx.RegisterMonad(".util.filetype", UtilFileType))
 	ctx.AssignGlobal("util.multipart", ctx.RegisterMonad(".util.multipart", UtilMultipart))
 
 	cmd.Exit(cmd.Run(ctx, cmd.Config{

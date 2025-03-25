@@ -1,5 +1,7 @@
 codeberg.org/anaseto/goal v1.1.0 h1:VsgsIj3jQRYk9rX37eRPAuxrBRcSsY7pxWD6M3KqHag=
 codeberg.org/anaseto/goal v1.1.0/go.mod h1:uSilOn+ZWioD+gG+3OopP090Fth5H47V/TU9ziI++CM=
+codeberg.org/anaseto/goal v1.2.0 h1:NvycmKQTzfGixFb0fbp5qshZn3WjhdlzjEwUdwlY6ks=
+codeberg.org/anaseto/goal v1.2.0/go.mod h1:uSilOn+ZWioD+gG+3OopP090Fth5H47V/TU9ziI++CM=
 filippo.io/edwards25519 v1.1.0/go.mod h1:BxyFTGdWcka3PhytdK4V28tE5sGfRvvvRV7EaN4VDT4=
 github.com/go-sql-driver/mysql v1.8.1/go.mod h1:wEBSXgmK//2ZFJyE+qWnIsVGmvmEKlqwuVSjsCm7DZg=
 github.com/jmoiron/sqlx v1.4.0 h1:1PLqN7S1UYp5t4SrVVnt4nUVNemrDAtxlulVe+Qgm3o=
