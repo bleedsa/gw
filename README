@@ -1,0 +1,22 @@
+GO ON THE WEB
+
+	Miscellaneous goal extensions for writing web backends using CGI.
+
+PROVIDED VERBS
+
+	SQLITE3
+	sql.open       s      open sqlite3 database at path s
+	sql.cls        db     close database
+	sql.exe[       db;s]  execute statement s in db
+	sql.qry[       db;s]  query db with s
+	sql.esc        s      escape sql special chars
+
+	HTML
+	html.esc       s      escape html special chars
+
+	URLS
+	url.dec        s      decode url % formatted strings
+
+	UTILS
+	util.now       x      return current unix timestamp (arg ignored)
+	util.multipart s      parse multipart string s
