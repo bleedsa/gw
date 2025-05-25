@@ -102,6 +102,24 @@ func Err(x string) goal.V {
 	return goal.NewError(goal.NewS(x))
 }
 
+type gwD struct {
+	t time.Time
+	s string
+}
+
+func (x *gwD) Append(ctx *goal.Context, dst []byte, compact bool) []byte {
+	return append(dst, x.s...)
+}
+
+func (x *gwD) Matches(y goal.BV) bool {
+	yv, ok := y.(*gwD)
+	return ok && x == yv
+}
+
+func (*gwD) Type() string {
+	return "D"
+}
+
 type gwSql struct {
 	db *sql.DB
 	s string
@@ -129,15 +147,6 @@ func EscStr(sql string) string {
 		escape = 0
 
 		switch c {
-		case 0: /* Must be escaped for 'mysql' */
-			escape = '0'
-			break
-		case '\n': /* Must be escaped for logs */
-			escape = 'n'
-			break
-		case '\r':
-			escape = 'r'
-			break
 		case '\\':
 			escape = '\\'
 			break
@@ -157,6 +166,44 @@ func EscStr(sql string) string {
 	}
 
 	return string(dest)
+}
+
+func DNew(ctx *goal.Context, args []goal.V) goal.V {
+	if len(args) != 1 {
+		return goal.Panicf("D.new i: ~1=#args")
+	}
+
+	i := args[0].I()
+	t := time.Unix(i, i)
+
+	return goal.NewV(&gwD {
+		t,
+		fmt.Sprintf("D.new[%q]", t),
+	})
+}
+
+func DFmt(ctx *goal.Context, args []goal.V) goal.V {
+	if len(args) != 1 {
+		return goal.Panicf("D.fmt DT: ~1=#args")
+	}
+
+	d, ok := args[0].BV().(*gwD); if !ok {
+		return goal.Panicf("D.fmt DT: bad type %q in DT", args[0].Type())
+	}
+
+	return goal.NewS(fmt.Sprintf("%s", d.t))
+}
+
+func DWeekday(ctx *goal.Context, args []goal.V) goal.V {
+	if len(args) != 1 {
+		return goal.Panicf("D.weekday DT: ~1=#args")
+	}
+
+	d, ok := args[0].BV().(*gwD); if !ok {
+		return goal.Panicf("D.weekday DT: bad type %q in DT", args[0].Type())
+	}
+
+	return goal.NewI(int64(d.t.Weekday()))
 }
 
 func SQLEsc(ctx *goal.Context, args []goal.V) goal.V {
@@ -303,6 +350,18 @@ func URLDec(ctx *goal.Context, args []goal.V) goal.V {
 	return goal.NewS(ret)
 }
 
+func URLEnc(ctx *goal.Context, args []goal.V) goal.V {
+	if len(args) != 1 {
+		return goal.Panicf("url.enc s: ~1=#args")
+	}
+
+	x, ok := args[0].BV().(goal.S); if !ok {
+		return goal.Panicf("url.enc: bad type %q in s", args[0].Type())
+	}
+
+	return goal.NewS(url.QueryEscape(string(x)))
+}
+
 func HTMLEsc(ctx *goal.Context, args []goal.V) goal.V {
 	if len(args) != 1 {
 		return goal.Panicf("html.esc s: ~1=#args")
@@ -404,6 +463,26 @@ ret:
 	return goal.NewD(goal.NewAV(head), goal.NewAV(body))
 }
 
+func UtilWrite(ctx *goal.Context, args []goal.V) goal.V {
+	if len(args) != 2 {
+		return goal.Panicf("util.write[s;B]: ~1=#args")
+	}
+
+	path, ok := args[1].BV().(goal.S); if !ok {
+		return goal.Panicf("util.write[s;B]: bad type %q in s", args[1].Type())
+	}
+
+	switch v := args[0].BV().(type) {
+	case *goal.AB:
+		err := os.WriteFile(string(path), v.Slice, 0666); if err != nil {
+			return Err(fmt.Sprintf("util.write[s;B]: failed to write file: %q", err))
+		}
+		return goal.NewI(1)
+	default:
+		return goal.Panicf("util.write[s;B]: bad type %q in B", args[0].Type())
+	}
+}
+
 func main() {
 	ctx := goal.NewContext()
 	ctx.Log = os.Stderr
@@ -416,12 +495,18 @@ func main() {
 	ctx.AssignGlobal("sql.qry",        ctx.RegisterDyad(".sql.qry", SQLQuery))
 
 	ctx.AssignGlobal("url.dec",        ctx.RegisterMonad(".url.dec", URLDec))
+	ctx.AssignGlobal("url.enc",        ctx.RegisterMonad(".url.enc", URLEnc))
 
 	ctx.AssignGlobal("html.esc",       ctx.RegisterMonad(".html.esc", HTMLEsc))
 
 	ctx.AssignGlobal("util.now",       ctx.RegisterMonad(".util.now", UtilNow))
 	ctx.AssignGlobal("util.filetype",  ctx.RegisterMonad(".util.filetype", UtilFileType))
 	ctx.AssignGlobal("util.multipart", ctx.RegisterMonad(".util.multipart", UtilMultipart))
+	ctx.AssignGlobal("util.write",     ctx.RegisterMonad(".util.write", UtilWrite))
+
+	ctx.AssignGlobal("D.new",          ctx.RegisterMonad(".D.new", DNew))
+	ctx.AssignGlobal("D.fmt",          ctx.RegisterMonad(".D.fmt", DFmt))
+	ctx.AssignGlobal("D.weekday",      ctx.RegisterMonad(".D.weekday", DWeekday))
 
 	cmd.Exit(cmd.Run(ctx, cmd.Config{
 		Help: help.HelpFunc(),
