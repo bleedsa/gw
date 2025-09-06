@@ -19,6 +19,8 @@ import (
 	gos "codeberg.org/anaseto/goal/os"
 
 	_ "github.com/mattn/go-sqlite3"
+
+	"github.com/godoes/natsort"
 )
 
 func RowsToV(rs *sql.Rows) goal.V {
@@ -374,6 +376,36 @@ func HTMLEsc(ctx *goal.Context, args []goal.V) goal.V {
 	return goal.NewS(html.EscapeString(string(x)))
 }
 
+func UtilNatsort(ctx *goal.Context, args []goal.V) goal.V {
+	var x *goal.AS
+
+	if len(args) != 1 {
+		return goal.Panicf("util.natsort x: ~1=#args")
+	}
+
+	bv := args[0].BV(); if bv == nil {
+		return goal.Panicf("util.natsort x: x is not boxed")
+	}
+
+	switch t := bv.(type) {
+	case *goal.AS:
+		x = t;
+	default:
+		return goal.Panicf("util.natsort x: x is not S")
+	}
+
+	// make a vec of strings to sort
+	L := x.Len();
+	vec := make([]string, L)
+	for i := 0; i < x.Len(); i++ {
+		vec[i] = string(x.At(i).BV().(goal.S))
+	}
+
+	natsort.Sort(vec)
+
+	return goal.NewAS(vec)
+}
+
 func UtilNow(ctx *goal.Context, args []goal.V) goal.V {
 	if len(args) != 1 {
 		return goal.Panicf("util.now x: ~1=#args")
@@ -499,6 +531,7 @@ func main() {
 
 	ctx.AssignGlobal("html.esc",       ctx.RegisterMonad(".html.esc", HTMLEsc))
 
+	ctx.AssignGlobal("util.natsort",   ctx.RegisterMonad(".util.natsort", UtilNatsort))
 	ctx.AssignGlobal("util.now",       ctx.RegisterMonad(".util.now", UtilNow))
 	ctx.AssignGlobal("util.filetype",  ctx.RegisterMonad(".util.filetype", UtilFileType))
 	ctx.AssignGlobal("util.multipart", ctx.RegisterMonad(".util.multipart", UtilMultipart))
